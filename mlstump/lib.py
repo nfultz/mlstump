@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from fire import Fire
+__all__ = ["provides", "needs", "graft"]
 
-from functools import partial
-
-"""Main module."""
-
-
-def provides(*args):
+def provides(*provides):
     def impl(f):
-        f.provides = args
+        f.provides = provides
         return f
     return impl
 
@@ -17,9 +12,8 @@ def get_needs(needs, f, self):
     providers = dict()
     for i in dir(self):
         ii = getattr(self, i)
-        if hasattr(ii, "provides"):
-            for k in ii.provides:
-                providers[k] = ii
+        for k in getattr(ii, "provides", []):
+            providers[k] = ii
 
     for need in needs:
         if not hasattr(self, need):
@@ -36,6 +30,9 @@ def needs(*needs):
             get_needs(needs, f, self)
             f(self, *args, **kwargs)
             return self
+        wrapped_f.needs = needs
+        if hasattr(f, "provides"):
+            wrapped_f.provides = provides
         return wrapped_f
     return wrap
 
@@ -46,6 +43,10 @@ def graft(stump):
             f(self, *args, **kwargs)
             g(self, *args, **kwargs)
             return self
+        if hasattr(f, "provides") or hasattr(g, "provides"):
+            impl.provides = getattr(f, "provides", tuple()) + getattr(g, "provides", tuple())
+        #if hasattr(f, "needs") or hasattr(g, "needs"):
+        #    impl.needs = getattr(f, "needs", tuple()) + getattr(g, "needs", tuple())
         return impl
 
     def wrap(scion):
@@ -54,30 +55,11 @@ def graft(stump):
             if not i.startswith("__") and hasattr(stump, i):
                 setattr(scion, i, call2(getattr(stump, i), getattr(scion, i)))
 
-        # If only in stump, plug in to scion
+        # If a provider is only in stump, plug in to scion
         for i in set(dir(stump)) - set(dir(scion)):
-            setattr(scion, i, getattr(stump, i))
+            if hasattr(getattr(stump, i), "provides"):
+                setattr(scion, i, getattr(stump, i))
 
         return scion
     return wrap
-
-class A:
-    @provides("d")
-    def a(self):
-        self.d = True
-        return self
-
-    @needs("d")
-    def b(self):
-        print(self.d)
-
-
-
-@graft(A)
-class B:
-    def b(self):
-        pass
-
-    def c(self):
-        pass
 

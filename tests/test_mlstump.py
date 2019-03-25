@@ -6,20 +6,63 @@
 import pytest
 
 
-from mlstump import mlstump
+from mlstump import provides, needs, graft
 
 
-@pytest.fixture
-def response():
-    """Sample pytest fixture.
+class A:
+    @provides("x")
+    def a(self):
+        self.x = 1
+        return self
 
-    See more at: http://doc.pytest.org/en/latest/fixture.html
-    """
-    # import requests
-    # return requests.get('https://github.com/audreyr/cookiecutter-pypackage')
+    @provides("y")
+    @needs("x")
+    def b(self):
+        self.y = self.x
 
 
-def test_content(response):
-    """Sample pytest test function with the pytest fixture as an argument."""
-    # from bs4 import BeautifulSoup
-    # assert 'GitHub' in BeautifulSoup(response.content).title.string
+
+@graft(A)
+class B:
+    @provides("z")
+    def b(self):
+        self.z = self.x
+        self.x = self.x + 1
+        pass
+
+    @needs("z")
+    def c(self):
+        del self.z
+
+    @needs("y")
+    def d(self):
+        del self.y
+
+def test_A_b():
+    a = A()
+    assert not hasattr(a, "x")
+    assert not hasattr(a, "y")
+    assert a == a.b()
+    assert a.x == 1
+    assert a.y == 1
+
+def test_B_b():
+    b = B()
+    assert not hasattr(b, "x")
+    assert not hasattr(b, "y")
+    assert not hasattr(b, "z")
+    assert b == b.b()
+    assert b.x == 2
+    assert b.y == 1
+    assert b.z == 1
+
+
+def test_B_c_d():
+    b = B()
+    assert not hasattr(b, "x")
+    assert not hasattr(b, "y")
+    assert not hasattr(b, "z")
+    assert b == b.c().d()
+    assert b.x == 2, "Should be created at 1, incremented to two, then cached and reused"
+    assert not hasattr(b, "y")
+    assert not hasattr(b, "z")
